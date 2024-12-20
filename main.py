@@ -1,7 +1,8 @@
+import argparse
 import numpy as np
 #Workaround for gym compatibility
-np.bool8 = np.bool_
-import gym
+# np.bool8 = np.bool_
+import gymnasium as gym
 
 import matplotlib
 matplotlib.get_backend()
@@ -10,31 +11,61 @@ import matplotlib.pyplot as plt
 from environment import DiscreteEnvironment
 from q_learning import QLearning
 
+from models import DQN
+from deep_q_learning import DeepQLearning
+import torch
+
+from trainer import Trainer
+
 if __name__ == '__main__':
-    #Discrete environment creation
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-a", "--algorithm", choices=['q_learning', 'deep_q_learning'], default="deep_q_learning", 
+                        help="algorithm for training, possible values: (q_learning, deep_q_learning)")
+    args = parser.parse_args()
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(device)
+    
     env = gym.make('MountainCar-v0',  render_mode="rgb_array")
-    partitions = [20] * len(env.observation_space.high)
-    action_number = env.action_space.n
-    discrete_env = DiscreteEnvironment(env, env.observation_space.low, env.observation_space.high, partitions, action_number)
-
+    
     #QLearning parameters
-    alpha = 0.1
-    gamma = 0.95
-    episodes = 25000
-    epsilon = 0.2
-    epsilon_decreas_start = 1
-    epsilon_decreas_end = episodes // 2
-    interval_size = 500
+    if args.algorithm=="q_learning":
+        #Discrete environment creation
+        partitions = [20] * len(env.observation_space.high)
+        action_number = env.action_space.n
+        discrete_env = DiscreteEnvironment(env, env.observation_space.low, env.observation_space.high, partitions, action_number)
 
-    q_learning = QLearning(discrete_env=discrete_env, alpha=alpha, gamma=gamma, epsilon=epsilon)
-    history = q_learning.train(episodes=episodes, 
-                               epsilon_decreas_start=epsilon_decreas_start, 
-                               epsilon_decreas_end=epsilon_decreas_end,
-                               interval_size=interval_size)
-    q_learning.save_strategy("strategy.npy")
-    q_learning.load_strategy("strategy.npy")
+        #Qlearning Parameters
+        alpha = 0.1
+        gamma = 0.95
+        episodes = 25000
+        epsilon = 0.2
+        epsilon_decay_value = 0.999
+        interval_size = 500
 
-    q_learning.run_strategy()
+        algorithm = QLearning(discrete_env=discrete_env, alpha=alpha, gamma=gamma)
+    else:
+        #Deep Qlearning Parameters
+        alpha = 0.001
+        gamma = 0.99
+        episodes = 25000
+        epsilon = 0.99
+        epsilon_decay_value = 0.999
+        interval_size = 500
+        batch_size = 64
+        replay_buffer_max_len = 1000
+        replay_buffer_min_len = 500
+
+        algorithm = DeepQLearning(env, DQN, batch_size, replay_buffer_max_len, replay_buffer_min_len, alpha, gamma, device)
+
+    trainer = Trainer(algorithm=algorithm, epsilon=epsilon, epsilon_decay_value=0.999, interval_size=interval_size)
+    # trainer.algorithm.load_checkpoint("./checkpoints/q_learning/ep_25000.npy")
+    history = trainer.train(episodes=episodes)
+
+    # trainer.save_checkpoint("strategy.npy")
+    # trainer.load_checkpoint("strategy.npy")
+
+    trainer.test()
     env.close()
 
     #Plot training results
@@ -47,3 +78,4 @@ if __name__ == '__main__':
     plt.legend(loc='lower right')
     plt.grid()
     plt.show()
+    print()
