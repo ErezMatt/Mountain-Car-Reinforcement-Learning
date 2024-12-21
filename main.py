@@ -59,11 +59,7 @@ if __name__ == '__main__':
         algorithm = DeepQLearning(env, DQN, batch_size, replay_buffer_max_len, replay_buffer_min_len, alpha, gamma, device)
 
     trainer = Trainer(algorithm=algorithm, epsilon=epsilon, epsilon_decay_value=0.999, interval_size=interval_size)
-    # trainer.algorithm.load_checkpoint("./checkpoints/q_learning/ep_25000.npy")
     history = trainer.train(episodes=episodes)
-
-    # trainer.save_checkpoint("strategy.npy")
-    # trainer.load_checkpoint("strategy.npy")
 
     trainer.test()
     env.close()
@@ -78,4 +74,3 @@ if __name__ == '__main__':
     plt.legend(loc='lower right')
     plt.grid()
     plt.show()
-    print()

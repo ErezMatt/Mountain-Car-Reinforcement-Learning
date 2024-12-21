@@ -52,24 +52,31 @@ class DeepQLearning:
         
         batch = random.sample(self.replay_buffer, self.batch_size)
 
-        for (state, action, reward, new_state, done) in batch:
-            state = torch.Tensor(state).to(self.device)
-            new_state = torch.Tensor(new_state).to(self.device)
-            reward = torch.Tensor([reward]).to(self.device)
+        states = torch.stack([torch.Tensor(transition[0]) for transition in batch]).to(self.device)
+        new_states = torch.stack([torch.Tensor(transition[3]) for transition in batch]).to(self.device)
+        
+        rewards = torch.cat([torch.Tensor([transition[2]]) for transition in batch]).to(self.device)
+        terminations = torch.cat([torch.Tensor([0]) if transition[4] else torch.Tensor([1]) for transition in batch]).to(self.device)
+        
+        actions = [transition[1] for transition in batch]
+        actions_one_hot = torch.nn.functional.one_hot(torch.LongTensor(actions), self.env.action_space.n).to(self.device)
 
-            if not done:
-                new_q = reward + self.gamma * torch.max(self.target_model(new_state))
-            else:
-                new_q = reward
+        with torch.no_grad():
+            new_qs = self.target_model(new_states).max(-1)[0]
 
-            model_prediction = self.model(state)
-            true_value = model_prediction.clone()
-            true_value[action] = new_q
+        # Calculate true action values, if state is a terminate state, action value = reward,
+        # otherwise action value = reward + gamma * newQ
+        true_action_values = rewards + terminations * self.gamma * new_qs
+        
+        model_predictions = self.model(states)
+        # Get vector of predicted values for true actions
+        predicted_action_values = torch.sum(model_predictions * actions_one_hot, -1)
+        
+        loss = self.criterion(predicted_action_values, true_action_values)
 
-            loss = self.criterion(model_prediction, true_value)
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
 
     def update(self, episode):
         if episode % 100 == 0:
